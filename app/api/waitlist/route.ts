@@ -12,25 +12,33 @@ type WaitlistPayload = {
 };
 
 export async function POST(request: Request) {
-  const payload = (await request.json()) as WaitlistPayload;
+  let payload: WaitlistPayload;
+  try {
+    payload = (await request.json()) as WaitlistPayload;
+  } catch {
+    return NextResponse.json({ ok: false, error: "invalid_json" }, { status: 400 });
+  }
 
-  if (!payload.email || !payload.variant) {
+  if (!payload || !payload.email || !payload.variant) {
     return NextResponse.json({ ok: false, error: "invalid_payload" }, { status: 400 });
   }
+
+  const firstTouch = payload.attribution?.firstTouch || {};
+  const currentTouch = payload.attribution?.currentTouch || {};
 
   const reportingRecord = {
     event_name: "waitlist_signup",
     email: payload.email,
     variant: payload.variant,
     campaign: payload.campaign,
-    utm_source_first: payload.attribution.firstTouch.utm_source || "",
-    utm_medium_first: payload.attribution.firstTouch.utm_medium || "",
-    utm_campaign_first: payload.attribution.firstTouch.utm_campaign || "",
-    utm_content_first: payload.attribution.firstTouch.utm_content || "",
-    utm_source_current: payload.attribution.currentTouch.utm_source || "",
-    utm_medium_current: payload.attribution.currentTouch.utm_medium || "",
-    utm_campaign_current: payload.attribution.currentTouch.utm_campaign || "",
-    utm_content_current: payload.attribution.currentTouch.utm_content || "",
+    utm_source_first: firstTouch.utm_source || "",
+    utm_medium_first: firstTouch.utm_medium || "",
+    utm_campaign_first: firstTouch.utm_campaign || "",
+    utm_content_first: firstTouch.utm_content || "",
+    utm_source_current: currentTouch.utm_source || "",
+    utm_medium_current: currentTouch.utm_medium || "",
+    utm_campaign_current: currentTouch.utm_campaign || "",
+    utm_content_current: currentTouch.utm_content || "",
     submitted_at: payload.submittedAt
   };
 

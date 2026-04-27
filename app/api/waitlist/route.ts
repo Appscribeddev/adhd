@@ -7,13 +7,21 @@ type WaitlistPayload = {
   attribution?: {
     firstTouch?: Record<string, string | undefined>;
     currentTouch?: Record<string, string | undefined>;
+    first?: Record<string, string | undefined>;
+    current?: Record<string, string | undefined>;
     first_touch?: Record<string, string | undefined>;
     current_touch?: Record<string, string | undefined>;
+    first_touch_utm?: Record<string, string | undefined>;
+    current_touch_utm?: Record<string, string | undefined>;
   };
   firstTouch?: Record<string, string | undefined>;
   currentTouch?: Record<string, string | undefined>;
+  first?: Record<string, string | undefined>;
+  current?: Record<string, string | undefined>;
   first_touch?: Record<string, string | undefined>;
   current_touch?: Record<string, string | undefined>;
+  first_touch_utm?: Record<string, string | undefined>;
+  current_touch_utm?: Record<string, string | undefined>;
   utm_source?: string;
   utm_medium?: string;
   utm_campaign?: string;
@@ -30,6 +38,8 @@ type WaitlistPayload = {
 };
 
 type UTMRecord = Record<string, string | undefined>;
+const FIRST_TOUCH_KEY = "first_touch_utm";
+const CURRENT_TOUCH_KEY = "current_touch_utm";
 
 function pickUTM(
   source: UTMRecord | undefined,
@@ -48,6 +58,39 @@ function pickUTM(
   };
 }
 
+function parseCookieHeader(cookieHeader: string | null): Record<string, string> {
+  if (!cookieHeader) {
+    return {};
+  }
+
+  return cookieHeader
+    .split(";")
+    .map((part) => part.trim())
+    .filter(Boolean)
+    .reduce<Record<string, string>>((acc, part) => {
+      const separator = part.indexOf("=");
+      if (separator <= 0) {
+        return acc;
+      }
+      const key = part.slice(0, separator);
+      const value = part.slice(separator + 1);
+      acc[key] = decodeURIComponent(value);
+      return acc;
+    }, {});
+}
+
+function parseCookieUTM(value: string | undefined): UTMRecord {
+  if (!value) {
+    return {};
+  }
+
+  try {
+    return JSON.parse(value) as UTMRecord;
+  } catch {
+    return {};
+  }
+}
+
 export async function POST(request: Request) {
   let payload: WaitlistPayload;
   try {
@@ -60,29 +103,43 @@ export async function POST(request: Request) {
     return NextResponse.json({ ok: false, error: "invalid_payload" }, { status: 400 });
   }
 
+  const cookies = parseCookieHeader(request.headers.get("cookie"));
+  const cookieFirstTouch = parseCookieUTM(cookies[FIRST_TOUCH_KEY]);
+  const cookieCurrentTouch = parseCookieUTM(cookies[CURRENT_TOUCH_KEY]);
+
   const firstTouch = pickUTM(
     payload.attribution?.firstTouch ||
+      payload.attribution?.first ||
       payload.attribution?.first_touch ||
+      payload.attribution?.first_touch_utm ||
       payload.firstTouch ||
-      payload.first_touch,
+      payload.first ||
+      payload.first_touch ||
+      payload.first_touch_utm ||
+      cookieFirstTouch,
     {
-      utm_source: payload.utm_source_first || payload.utm_source,
-      utm_medium: payload.utm_medium_first || payload.utm_medium,
-      utm_campaign: payload.utm_campaign_first || payload.utm_campaign,
-      utm_content: payload.utm_content_first || payload.utm_content
+      utm_source: payload.utm_source_first || payload.utm_source || cookieFirstTouch.utm_source,
+      utm_medium: payload.utm_medium_first || payload.utm_medium || cookieFirstTouch.utm_medium,
+      utm_campaign: payload.utm_campaign_first || payload.utm_campaign || cookieFirstTouch.utm_campaign,
+      utm_content: payload.utm_content_first || payload.utm_content || cookieFirstTouch.utm_content
     }
   );
 
   const currentTouch = pickUTM(
     payload.attribution?.currentTouch ||
+      payload.attribution?.current ||
       payload.attribution?.current_touch ||
+      payload.attribution?.current_touch_utm ||
       payload.currentTouch ||
-      payload.current_touch,
+      payload.current ||
+      payload.current_touch ||
+      payload.current_touch_utm ||
+      cookieCurrentTouch,
     {
-      utm_source: payload.utm_source_current || payload.utm_source,
-      utm_medium: payload.utm_medium_current || payload.utm_medium,
-      utm_campaign: payload.utm_campaign_current || payload.utm_campaign,
-      utm_content: payload.utm_content_current || payload.utm_content
+      utm_source: payload.utm_source_current || payload.utm_source || cookieCurrentTouch.utm_source,
+      utm_medium: payload.utm_medium_current || payload.utm_medium || cookieCurrentTouch.utm_medium,
+      utm_campaign: payload.utm_campaign_current || payload.utm_campaign || cookieCurrentTouch.utm_campaign,
+      utm_content: payload.utm_content_current || payload.utm_content || cookieCurrentTouch.utm_content
     }
   );
 

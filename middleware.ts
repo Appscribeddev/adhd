@@ -34,14 +34,14 @@ export function middleware(request: NextRequest) {
   const existingFirstTouch = request.cookies.get(FIRST_TOUCH_KEY)?.value;
 
   if (!existingFirstTouch) {
-    response.cookies.set(FIRST_TOUCH_KEY, encodeURIComponent(JSON.stringify(utm)), {
+    response.cookies.set(FIRST_TOUCH_KEY, JSON.stringify(utm), {
       sameSite: "lax",
       path: "/",
       maxAge: 60 * 60 * 24 * 30
     });
   }
 
-  response.cookies.set(CURRENT_TOUCH_KEY, encodeURIComponent(JSON.stringify(utm)), {
+  response.cookies.set(CURRENT_TOUCH_KEY, JSON.stringify(utm), {
     sameSite: "lax",
     path: "/",
     maxAge: 60 * 60 * 24 * 30

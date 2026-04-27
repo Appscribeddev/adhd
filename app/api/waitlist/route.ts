@@ -84,11 +84,21 @@ function parseCookieUTM(value: string | undefined): UTMRecord {
     return {};
   }
 
+  const candidates = [value];
   try {
-    return JSON.parse(value) as UTMRecord;
-  } catch {
-    return {};
+    candidates.push(decodeURIComponent(value));
+  } catch {}
+  try {
+    candidates.push(decodeURIComponent(candidates[candidates.length - 1]));
+  } catch {}
+
+  for (const candidate of candidates) {
+    try {
+      return JSON.parse(candidate) as UTMRecord;
+    } catch {}
   }
+
+  return {};
 }
 
 export async function POST(request: Request) {

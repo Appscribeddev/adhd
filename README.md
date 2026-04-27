@@ -1,12 +1,23 @@
-# ADH Planner — AI ADHD Task Execution Copilot
+# ADHD Planner LP Stack
 
-GTM LP stack for validation sprint.
+Initial deployable GTM LP implementation for ADH-22.
 
 ## Routes
-- `/lp/a` — Planner + Task Execution Copilot  
-- `/lp/b` — Cleaning Planner extension  
-- `/compare` — Planner Copilot vs paper/generic apps
 
-## Deploy
-- Remote: Contabo `213.199.48.187:/srv/adh-planner/app`
-- GitHub repo: `Appscribeddev/adhd`
+- `/lp/a`
+- `/lp/b`
+- `/compare`
+
+## Analytics + attribution
+
+- Emits client events: `page_view`, `waitlist_signup`
+- Captures and forwards first-touch/current-touch UTM fields:
+  - `utm_source`, `utm_medium`, `utm_campaign`, `utm_content`
+- Waitlist API route: `POST /api/waitlist`
+
+## Local run
+
+```bash
+npm install
+npm run dev
+```

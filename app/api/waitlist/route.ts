@@ -4,12 +4,49 @@ type WaitlistPayload = {
   email: string;
   variant: string;
   campaign: string;
-  attribution: {
-    firstTouch: Record<string, string | undefined>;
-    currentTouch: Record<string, string | undefined>;
+  attribution?: {
+    firstTouch?: Record<string, string | undefined>;
+    currentTouch?: Record<string, string | undefined>;
+    first_touch?: Record<string, string | undefined>;
+    current_touch?: Record<string, string | undefined>;
   };
+  firstTouch?: Record<string, string | undefined>;
+  currentTouch?: Record<string, string | undefined>;
+  first_touch?: Record<string, string | undefined>;
+  current_touch?: Record<string, string | undefined>;
+  utm_source?: string;
+  utm_medium?: string;
+  utm_campaign?: string;
+  utm_content?: string;
+  utm_source_first?: string;
+  utm_medium_first?: string;
+  utm_campaign_first?: string;
+  utm_content_first?: string;
+  utm_source_current?: string;
+  utm_medium_current?: string;
+  utm_campaign_current?: string;
+  utm_content_current?: string;
   submittedAt: string;
 };
+
+type UTMRecord = Record<string, string | undefined>;
+
+function pickUTM(
+  source: UTMRecord | undefined,
+  fallback: {
+    utm_source?: string;
+    utm_medium?: string;
+    utm_campaign?: string;
+    utm_content?: string;
+  } = {}
+): UTMRecord {
+  return {
+    utm_source: source?.utm_source || fallback.utm_source || "",
+    utm_medium: source?.utm_medium || fallback.utm_medium || "",
+    utm_campaign: source?.utm_campaign || fallback.utm_campaign || "",
+    utm_content: source?.utm_content || fallback.utm_content || ""
+  };
+}
 
 export async function POST(request: Request) {
   let payload: WaitlistPayload;
@@ -23,8 +60,31 @@ export async function POST(request: Request) {
     return NextResponse.json({ ok: false, error: "invalid_payload" }, { status: 400 });
   }
 
-  const firstTouch = payload.attribution?.firstTouch || {};
-  const currentTouch = payload.attribution?.currentTouch || {};
+  const firstTouch = pickUTM(
+    payload.attribution?.firstTouch ||
+      payload.attribution?.first_touch ||
+      payload.firstTouch ||
+      payload.first_touch,
+    {
+      utm_source: payload.utm_source_first || payload.utm_source,
+      utm_medium: payload.utm_medium_first || payload.utm_medium,
+      utm_campaign: payload.utm_campaign_first || payload.utm_campaign,
+      utm_content: payload.utm_content_first || payload.utm_content
+    }
+  );
+
+  const currentTouch = pickUTM(
+    payload.attribution?.currentTouch ||
+      payload.attribution?.current_touch ||
+      payload.currentTouch ||
+      payload.current_touch,
+    {
+      utm_source: payload.utm_source_current || payload.utm_source,
+      utm_medium: payload.utm_medium_current || payload.utm_medium,
+      utm_campaign: payload.utm_campaign_current || payload.utm_campaign,
+      utm_content: payload.utm_content_current || payload.utm_content
+    }
+  );
 
   const reportingRecord = {
     event_name: "waitlist_signup",

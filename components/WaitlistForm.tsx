@@ -29,11 +29,27 @@ export default function WaitlistForm({ variant, ctaLabel }: WaitlistFormProps) {
     setIsLoading(true);
     setResult("");
 
+    // Re-read attribution at submit time to avoid empty payloads from first-render race conditions.
+    const submitAttribution = readInitialAttribution(window.location.search);
+
     const payload = {
       email,
       variant,
       campaign: "adh15_planner_validation",
-      attribution,
+      attribution: submitAttribution,
+      utm_source: submitAttribution.currentTouch.utm_source || submitAttribution.firstTouch.utm_source || "",
+      utm_medium: submitAttribution.currentTouch.utm_medium || submitAttribution.firstTouch.utm_medium || "",
+      utm_campaign:
+        submitAttribution.currentTouch.utm_campaign || submitAttribution.firstTouch.utm_campaign || "",
+      utm_content: submitAttribution.currentTouch.utm_content || submitAttribution.firstTouch.utm_content || "",
+      utm_source_first: submitAttribution.firstTouch.utm_source || "",
+      utm_medium_first: submitAttribution.firstTouch.utm_medium || "",
+      utm_campaign_first: submitAttribution.firstTouch.utm_campaign || "",
+      utm_content_first: submitAttribution.firstTouch.utm_content || "",
+      utm_source_current: submitAttribution.currentTouch.utm_source || "",
+      utm_medium_current: submitAttribution.currentTouch.utm_medium || "",
+      utm_campaign_current: submitAttribution.currentTouch.utm_campaign || "",
+      utm_content_current: submitAttribution.currentTouch.utm_content || "",
       submittedAt: new Date().toISOString()
     };
 
@@ -48,7 +64,7 @@ export default function WaitlistForm({ variant, ctaLabel }: WaitlistFormProps) {
         throw new Error(`waitlist_submit_failed_${response.status}`);
       }
 
-      trackEvent("waitlist_signup", attribution, {
+      trackEvent("waitlist_signup", submitAttribution, {
         variant,
         campaign: payload.campaign,
         email_domain: email.split("@")[1] || "unknown"

@@ -1,4 +1,6 @@
 import { NextResponse } from "next/server";
+import { appendFile, mkdir } from "fs/promises";
+import { dirname, join } from "path";
 
 type WaitlistPayload = {
   email: string;
@@ -40,6 +42,66 @@ type WaitlistPayload = {
 type UTMRecord = Record<string, string | undefined>;
 const FIRST_TOUCH_KEY = "first_touch_utm";
 const CURRENT_TOUCH_KEY = "current_touch_utm";
+const WAITLIST_STORE_PATH =
+  process.env.WAITLIST_STORE_PATH || join(process.cwd(), "data", "waitlist-signups.jsonl");
+const RATE_LIMIT_WINDOW_MS = 10 * 60_000;
+const RATE_LIMIT_MAX_REQUESTS = 3;
+
+type RateLimitEntry = {
+  count: number;
+  resetAt: number;
+};
+
+const rateLimitStore = new Map<string, RateLimitEntry>();
+
+function getClientId(request: Request): string {
+  const forwardedFor = request.headers.get("x-forwarded-for");
+  if (forwardedFor) {
+    return forwardedFor.split(",")[0].trim().toLowerCase();
+  }
+
+  const realIp = request.headers.get("x-real-ip");
+  if (realIp) {
+    return realIp.trim().toLowerCase();
+  }
+
+  const userAgent = request.headers.get("user-agent") || "unknown";
+  return `unknown:${userAgent.slice(0, 120)}`;
+}
+
+function enforceRateLimit(clientId: string): { limited: boolean; retryAfterSeconds: number } {
+  const now = Date.now();
+  for (const [key, value] of rateLimitStore) {
+    if (value.resetAt <= now) {
+      rateLimitStore.delete(key);
+    }
+  }
+
+  const current = rateLimitStore.get(clientId);
+  if (!current || current.resetAt <= now) {
+    rateLimitStore.set(clientId, { count: 1, resetAt: now + RATE_LIMIT_WINDOW_MS });
+    return { limited: false, retryAfterSeconds: 0 };
+  }
+
+  current.count += 1;
+  if (current.count > RATE_LIMIT_MAX_REQUESTS) {
+    return {
+      limited: true,
+      retryAfterSeconds: Math.max(1, Math.ceil((current.resetAt - now) / 1000))
+    };
+  }
+
+  return { limited: false, retryAfterSeconds: 0 };
+}
+
+function isValidEmail(email: string): boolean {
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
+}
+
+async function persistWaitlistRecord(record: Record<string, string>) {
+  await mkdir(dirname(WAITLIST_STORE_PATH), { recursive: true });
+  await appendFile(WAITLIST_STORE_PATH, `${JSON.stringify(record)}\n`, "utf8");
+}
 
 function pickUTM(
   source: UTMRecord | undefined,
@@ -74,7 +136,11 @@ function parseCookieHeader(cookieHeader: string | null): Record<string, string> 
       }
       const key = part.slice(0, separator);
       const value = part.slice(separator + 1);
-      acc[key] = decodeURIComponent(value);
+      try {
+        acc[key] = decodeURIComponent(value);
+      } catch {
+        acc[key] = value;
+      }
       return acc;
     }, {});
 }
@@ -102,6 +168,18 @@ function parseCookieUTM(value: string | undefined): UTMRecord {
 }
 
 export async function POST(request: Request) {
+  const clientId = getClientId(request);
+  const rateLimitResult = enforceRateLimit(clientId);
+  if (rateLimitResult.limited) {
+    return NextResponse.json(
+      { ok: false, error: "rate_limited", retryAfterSeconds: rateLimitResult.retryAfterSeconds },
+      {
+        status: 429,
+        headers: { "Retry-After": String(rateLimitResult.retryAfterSeconds) }
+      }
+    );
+  }
+
   let payload: WaitlistPayload;
   try {
     payload = (await request.json()) as WaitlistPayload;
@@ -111,6 +189,9 @@ export async function POST(request: Request) {
 
   if (!payload || !payload.email || !payload.variant) {
     return NextResponse.json({ ok: false, error: "invalid_payload" }, { status: 400 });
+  }
+  if (!isValidEmail(payload.email)) {
+    return NextResponse.json({ ok: false, error: "invalid_email" }, { status: 400 });
   }
 
   const cookies = parseCookieHeader(request.headers.get("cookie"));
@@ -169,7 +250,19 @@ export async function POST(request: Request) {
     submitted_at: payload.submittedAt
   };
 
-  console.log("waitlist_record", reportingRecord);
+  try {
+    await persistWaitlistRecord(reportingRecord);
+  } catch (error) {
+    console.error("waitlist_persist_failed", error);
+    return NextResponse.json({ ok: false, error: "persist_failed" }, { status: 500 });
+  }
+
+  console.log("waitlist_record_saved", {
+    event_name: reportingRecord.event_name,
+    variant: reportingRecord.variant,
+    campaign: reportingRecord.campaign,
+    submitted_at: reportingRecord.submitted_at
+  });
 
   return NextResponse.json({ ok: true, record: reportingRecord }, { status: 201 });
 }

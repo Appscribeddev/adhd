@@ -4,7 +4,7 @@ import { FormEvent, useEffect, useState } from "react";
 import { readInitialAttribution, type AttributionPayload } from "../lib/attribution";
 import { trackEvent } from "../lib/analytics";
 
-type WaitlistFormProps = {
+type WaitlistFormDarkProps = {
   variant: "lp_a" | "lp_b" | "compare";
   ctaLabel: string;
 };
@@ -14,7 +14,7 @@ const EMPTY_ATTRIBUTION: AttributionPayload = {
   currentTouch: {}
 };
 
-export default function WaitlistForm({ variant, ctaLabel }: WaitlistFormProps) {
+export default function WaitlistFormDark({ variant, ctaLabel }: WaitlistFormDarkProps) {
   const [email, setEmail] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [result, setResult] = useState<string>("");
@@ -29,7 +29,6 @@ export default function WaitlistForm({ variant, ctaLabel }: WaitlistFormProps) {
     setIsLoading(true);
     setResult("");
 
-    // Re-read attribution at submit time to avoid empty payloads from first-render race conditions.
     const submitAttribution = readInitialAttribution(window.location.search);
 
     const payload = {
@@ -70,7 +69,7 @@ export default function WaitlistForm({ variant, ctaLabel }: WaitlistFormProps) {
         email_domain: email.split("@")[1] || "unknown"
       });
 
-      setResult("You are on the waitlist.");
+      setResult("You are on the waitlist!");
       setEmail("");
     } catch (error) {
       console.error(error);
@@ -80,21 +79,23 @@ export default function WaitlistForm({ variant, ctaLabel }: WaitlistFormProps) {
     }
   }
 
-  if (result === "You are on the waitlist.") {
+  if (result === "You are on the waitlist!") {
     return (
-      <div style={{ textAlign: "center", padding: "16px 0" }}>
-        <div style={{ fontSize: "1.8rem", marginBottom: "10px" }}>🎉</div>
-        <strong style={{ display: "block", marginBottom: "4px" }}>You&apos;re on the waitlist!</strong>
-        <small>We&apos;ll email you when early access opens.</small>
+      <div style={{ color: "#fff", textAlign: "center", padding: "12px 0" }}>
+        <div style={{ fontSize: "1.5rem", marginBottom: "8px" }}>🎉</div>
+        <strong>You&apos;re on the list!</strong>
+        <p style={{ opacity: 0.75, margin: "4px 0 0", fontSize: "0.9rem" }}>
+          We&apos;ll email you when early access opens.
+        </p>
       </div>
     );
   }
 
   return (
-    <form className="stack" onSubmit={onSubmit}>
-      <label htmlFor={`email-${variant}`}>Your email address</label>
+    <form className="cta-form" onSubmit={onSubmit}>
+      <label htmlFor={`email-dark-${variant}`}>Your email</label>
       <input
-        id={`email-${variant}`}
+        id={`email-dark-${variant}`}
         name="email"
         type="email"
         required
@@ -102,10 +103,10 @@ export default function WaitlistForm({ variant, ctaLabel }: WaitlistFormProps) {
         value={email}
         onChange={(event) => setEmail(event.target.value)}
       />
-      <button className="button" type="submit" disabled={isLoading}>
+      <button className="button-white" type="submit" disabled={isLoading}>
         {isLoading ? "Submitting..." : ctaLabel}
       </button>
-      {result ? <small>{result}</small> : null}
+      {result ? <small style={{ color: "rgba(255,255,255,0.75)" }}>{result}</small> : null}
     </form>
   );
 }

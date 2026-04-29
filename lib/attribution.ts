@@ -11,6 +11,8 @@ export type AttributionPayload = {
 };
 
 const FIELDS: Array<keyof UtmFields> = ["utm_source", "utm_medium", "utm_campaign", "utm_content"];
+const FIRST_TOUCH_KEY = "first_touch_utm";
+const CURRENT_TOUCH_KEY = "current_touch_utm";
 
 function pickFromSearchParams(searchParams: URLSearchParams): UtmFields {
   const fields: UtmFields = {};
@@ -29,38 +31,86 @@ function hasAnyUtm(value: UtmFields): boolean {
   return FIELDS.some((key) => Boolean(value[key]));
 }
 
+function parseUtmJson(raw: string | null): UtmFields {
+  if (!raw) {
+    return {};
+  }
+
+  try {
+    return JSON.parse(raw) as UtmFields;
+  } catch {
+    return {};
+  }
+}
+
+function readCookieValue(key: string): string | null {
+  if (typeof document === "undefined") {
+    return null;
+  }
+
+  const encodedKey = `${key}=`;
+  const match = document.cookie
+    .split(";")
+    .map((part) => part.trim())
+    .find((part) => part.startsWith(encodedKey));
+
+  if (!match) {
+    return null;
+  }
+
+  return decodeURIComponent(match.slice(encodedKey.length));
+}
+
+function writeCookieJson(key: string, value: UtmFields): void {
+  if (typeof document === "undefined") {
+    return;
+  }
+
+  const encoded = encodeURIComponent(JSON.stringify(value));
+  document.cookie = `${key}=${encoded}; Path=/; Max-Age=2592000; SameSite=Lax`;
+}
+
+function persistTouch(key: string, value: UtmFields): void {
+  if (typeof window !== "undefined") {
+    window.localStorage.setItem(key, JSON.stringify(value));
+  }
+  writeCookieJson(key, value);
+}
+
 export function readInitialAttribution(search: string): AttributionPayload {
-  const currentTouch = pickFromSearchParams(new URLSearchParams(search));
+  const searchTouch = pickFromSearchParams(new URLSearchParams(search));
 
   if (typeof window === "undefined") {
-    return { firstTouch: currentTouch, currentTouch };
+    return { firstTouch: searchTouch, currentTouch: searchTouch };
   }
 
-  const raw = window.localStorage.getItem("first_touch_utm");
-  let firstTouch: UtmFields = {};
+  const storedFirstTouch = parseUtmJson(window.localStorage.getItem(FIRST_TOUCH_KEY));
+  const storedCurrentTouch = parseUtmJson(window.localStorage.getItem(CURRENT_TOUCH_KEY));
+  const cookieFirstTouch = parseUtmJson(readCookieValue(FIRST_TOUCH_KEY));
+  const cookieCurrentTouch = parseUtmJson(readCookieValue(CURRENT_TOUCH_KEY));
 
-  if (raw) {
-    try {
-      firstTouch = JSON.parse(raw) as UtmFields;
-    } catch {
-      firstTouch = {};
-    }
-  }
+  let firstTouch = hasAnyUtm(storedFirstTouch) ? storedFirstTouch : cookieFirstTouch;
+  let currentTouch = hasAnyUtm(storedCurrentTouch) ? storedCurrentTouch : cookieCurrentTouch;
 
-  if (hasAnyUtm(currentTouch)) {
+  if (hasAnyUtm(searchTouch)) {
     if (!hasAnyUtm(firstTouch)) {
-      window.localStorage.setItem("first_touch_utm", JSON.stringify(currentTouch));
-      firstTouch = currentTouch;
+      firstTouch = searchTouch;
+      persistTouch(FIRST_TOUCH_KEY, firstTouch);
     }
-    window.localStorage.setItem("current_touch_utm", JSON.stringify(currentTouch));
+    currentTouch = searchTouch;
+    persistTouch(CURRENT_TOUCH_KEY, currentTouch);
+  }
+
+  if (hasAnyUtm(firstTouch) && !hasAnyUtm(parseUtmJson(window.localStorage.getItem(FIRST_TOUCH_KEY)))) {
+    persistTouch(FIRST_TOUCH_KEY, firstTouch);
+  }
+
+  if (hasAnyUtm(currentTouch) && !hasAnyUtm(parseUtmJson(window.localStorage.getItem(CURRENT_TOUCH_KEY)))) {
+    persistTouch(CURRENT_TOUCH_KEY, currentTouch);
   }
 
   return {
     firstTouch,
-    currentTouch: hasAnyUtm(currentTouch)
-      ? currentTouch
-      : raw
-        ? (JSON.parse(window.localStorage.getItem("current_touch_utm") || "{}") as UtmFields)
-        : {}
+    currentTouch
   };
 }
